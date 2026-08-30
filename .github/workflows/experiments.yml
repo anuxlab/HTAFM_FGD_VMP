@@ -22,38 +22,41 @@ jobs:
       fail-fast: false
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.20'
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('simulator/go.sum') }}
           restore-keys: ${{ runner.os }}-go-
-      - name: Clone, copy H‑TAFM, and build simulator
+
+      - name: Clone and build simulator (from fork with H‑TAFM)
         run: |
-          git clone https://github.com/hkust-adsl/kubernetes-scheduler-simulator.git simulator
-          cp -r custom-scheduler/htafm simulator/pkg/scheduler/
+          git clone https://github.com/anuxlab/anu_kubernetes-scheduler-simulator.git simulator
           cd simulator
-          # Add blank import to trigger the plugin's init()
-          sed -i '/^import (/a \ \ _ "github.com/hkust-adsl/kubernetes-scheduler-simulator/pkg/scheduler/htafm"' pkg/scheduler/register.go
-          # Build without vendoring (make uses go build, not go mod vendor)
           make
           chmod +x bin/simon
-      - name: Install simulator Python deps
+
+      - name: Install simulator Python dependencies
         run: |
           cd simulator
           pip install -r requirements.txt
-      - name: Prepare trace data
+
+      - name: Prepare trace data (CSV → YAML)
         run: |
           cd simulator/data
           if [ ! -f csv/openb_pod_list_gpushare40.csv ]; then
@@ -64,14 +67,17 @@ jobs:
           chmod +x prepare_input.sh
           sed -i 's/python /python3 /g' prepare_input.sh
           ./prepare_input.sh
-      - name: Cache YAML trace
+
+      - name: Cache YAML trace data
         uses: actions/cache@v4
         with:
           path: simulator/data/openb_pod_list_gpushare40
           key: ${{ runner.os }}-trace-yaml-${{ hashFiles('simulator/data/csv/openb_pod_list_gpushare40.csv') }}
           restore-keys: ${{ runner.os }}-trace-yaml-
-      - name: Install additional packages
+
+      - name: Install additional Python packages (for parsing)
         run: pip install pandas matplotlib numpy
+
       - name: Run ${{ matrix.policy }} experiment
         run: |
           cd simulator
@@ -114,6 +120,7 @@ jobs:
                 -tune 1.3 -tuneseed 50 --shuffle-pod=true \
                 -z experiments/test_random/snapshot/ds01 ;;
           esac
+
       - name: Upload logs for ${{ matrix.policy }}
         uses: actions/upload-artifact@v4
         with:
@@ -122,7 +129,7 @@ jobs:
           if-no-files-found: ignore
 
   # ============================================================
-  # H‑TAFM EXPERIMENTS (3 variants)
+  # H‑TAFM EXPERIMENTS (3 variants, always run if enabled)
   # ============================================================
   run-htafm:
     runs-on: ubuntu-latest
@@ -133,36 +140,41 @@ jobs:
       fail-fast: false
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.20'
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('simulator/go.sum') }}
           restore-keys: ${{ runner.os }}-go-
-      - name: Clone, copy H‑TAFM, and build simulator
+
+      - name: Clone and build simulator (from fork with H‑TAFM)
         run: |
-          git clone https://github.com/hkust-adsl/kubernetes-scheduler-simulator.git simulator
-          cp -r custom-scheduler/htafm simulator/pkg/scheduler/
+          git clone https://github.com/anuxlab/anu_kubernetes-scheduler-simulator.git simulator
           cd simulator
-          sed -i '/^import (/a \ \ _ "github.com/hkust-adsl/kubernetes-scheduler-simulator/pkg/scheduler/htafm"' pkg/scheduler/register.go
           make
           chmod +x bin/simon
-      - name: Install simulator Python deps
+
+      - name: Install simulator Python dependencies
         run: |
           cd simulator
           pip install -r requirements.txt
-      - name: Prepare trace data
+
+      - name: Prepare trace data (CSV → YAML)
         run: |
           cd simulator/data
           if [ ! -f csv/openb_pod_list_gpushare40.csv ]; then
@@ -173,14 +185,17 @@ jobs:
           chmod +x prepare_input.sh
           sed -i 's/python /python3 /g' prepare_input.sh
           ./prepare_input.sh
-      - name: Cache YAML trace
+
+      - name: Cache YAML trace data
         uses: actions/cache@v4
         with:
           path: simulator/data/openb_pod_list_gpushare40
           key: ${{ runner.os }}-trace-yaml-${{ hashFiles('simulator/data/csv/openb_pod_list_gpushare40.csv') }}
           restore-keys: ${{ runner.os }}-trace-yaml-
-      - name: Install additional packages
+
+      - name: Install additional Python packages
         run: pip install pandas matplotlib numpy
+
       - name: Generate cluster config and run HTAFM-${{ matrix.variant }}
         run: |
           cd simulator
@@ -229,6 +244,7 @@ jobs:
             -f ${CLUSTER_CONFIG} \
             --default-scheduler-config ${EXP_DIR}/scheduler-config.yaml \
             > ${LOG_FILE} 2>&1
+
       - name: Upload logs for HTAFM-${{ matrix.variant }}
         uses: actions/upload-artifact@v4
         with:
@@ -237,26 +253,30 @@ jobs:
           if-no-files-found: ignore
 
   # ============================================================
-  # AGGREGATE & COMMIT
+  # AGGREGATE & COMMIT RESULTS
   # ============================================================
   aggregate-results:
     needs: [run-baseline, run-htafm]
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
       - name: Install required packages
         run: pip install pandas matplotlib numpy
+
       - name: Download all logs
         uses: actions/download-artifact@v4
         with:
           path: all-logs
-      - name: Organise logs
+
+      - name: Organise logs for parsing
         run: |
           mkdir -p simulator/experiments
           for policy_dir in all-logs/*; do
@@ -264,19 +284,23 @@ jobs:
               cp -r "$policy_dir"/* simulator/experiments/ 2>/dev/null || true
             fi
           done
+
       - name: Parse results
         run: |
           cd simulator
           python3 ../scripts/parse_results.py --input-dir experiments --output-dir ../results
+
       - name: Generate README (complete overwrite)
         run: |
           cd simulator
           python3 ../scripts/update_readme.py --results-dir ../results --readme ../README.md
+
       - name: Upload aggregated results
         uses: actions/upload-artifact@v4
         with:
           name: aggregated-results
           path: results/
+
       - name: Commit updated README and results
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
