@@ -5,14 +5,10 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:  # Allows manual trigger
+  workflow_dispatch:
     inputs:
-      run_baselines:
-        description: 'Run baseline experiments (FGD, BestFit, Random)'
-        type: boolean
-        default: true
       run_htafm:
-        description: 'Run H-TAFM experiments'
+        description: 'Run H‑TAFM experiments (in addition to baselines)'
         type: boolean
         default: false
 
@@ -20,6 +16,10 @@ jobs:
   run-experiments:
     name: Run VM Placement Experiments
     runs-on: ubuntu-latest
+
+    # Optional: set environment variable to suppress Node 20 deprecation warning
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
     steps:
       - name: Checkout repository
@@ -35,12 +35,23 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make wget
+
       - name: Clone Kubernetes Scheduler Simulator
         run: |
           git clone https://github.com/hkust-adsl/kubernetes-scheduler-simulator.git simulator
           cd simulator
           go mod vendor
           make
+          chmod +x bin/simon
+
+      - name: Install Python dependencies (simulator)
+        run: |
+          cd simulator
+          pip install -r requirements.txt
 
       - name: Prepare trace data
         run: |
@@ -53,64 +64,62 @@ jobs:
           ls -la csv/
           ls -la openb_pod_list_gpushare40/
 
-      - name: Install Python dependencies
-        run: |
-          pip install pandas matplotlib numpy
+      - name: Install additional Python packages for parsing
+        run: pip install pandas matplotlib numpy
 
-      - name: Run baseline experiments
-        if: github.event.inputs.run_baselines != 'false'
+      - name: Run baseline experiments (FGD, BestFit, Random)
+        id: baselines
         run: |
           cd simulator
           mkdir -p experiments
 
           # FGD
-          python3 scripts/generate_config_and_run.py \
-            -d experiments/test_fgd \
-            -e -b \
+          echo "=== Running FGD ==="
+          time python3 scripts/generate_config_and_run.py \
+            -d experiments/test_fgd -e -b \
             -f data/openb_pod_list_gpushare40 \
-            -FGD 1000 \
-            -gpusel FGD \
-            -dimext share \
-            -norm max \
-            -tune 1.3 \
-            -tuneseed 50 \
-            --shuffle-pod=true \
+            -FGD 1000 -gpusel FGD -dimext share -norm max \
+            -tune 1.3 -tuneseed 50 --shuffle-pod=true \
             -z experiments/test_fgd/snapshot/ds01
-
+          
           # BestFit
-          python3 scripts/generate_config_and_run.py \
-            -d experiments/test_bestfit \
-            -e -b \
+          echo "=== Running BestFit ==="
+          time python3 scripts/generate_config_and_run.py \
+            -d experiments/test_bestfit -e -b \
             -f data/openb_pod_list_gpushare40 \
             -BestFit 1000 \
-            -tune 1.3 \
-            -tuneseed 50 \
-            --shuffle-pod=true \
+            -tune 1.3 -tuneseed 50 --shuffle-pod=true \
             -z experiments/test_bestfit/snapshot/ds01
-
+          
           # Random
-          python3 scripts/generate_config_and_run.py \
-            -d experiments/test_random \
-            -e -b \
+          echo "=== Running Random ==="
+          time python3 scripts/generate_config_and_run.py \
+            -d experiments/test_random -e -b \
             -f data/openb_pod_list_gpushare40 \
-            -Random 1000 \
-            -gpusel random \
-            -tune 1.3 \
-            -tuneseed 50 \
-            --shuffle-pod=true \
+            -Random 1000 -gpusel random \
+            -tune 1.3 -tuneseed 50 --shuffle-pod=true \
             -z experiments/test_random/snapshot/ds01
+
+      - name: Run H‑TAFM experiments (if enabled)
+        if: github.event.inputs.run_htafm == 'true'
+        run: |
+          cd simulator
+          echo "=== Running H‑TAFM (Cut) ==="
+          # Placeholder: replace with actual H‑TAFM command
+          # python3 scripts/generate_config_and_run.py -d experiments/test_htafm -e -b -f data/openb_pod_list_gpushare40 -HTAFM 1000 ...
+          echo "H‑TAFM experiments not yet implemented – add your command here"
 
       - name: Parse results
         run: |
           cd simulator
           python3 ../scripts/parse_results.py --input-dir experiments --output-dir ../results
 
-      - name: Generate summary tables
+      - name: Update README with summary
         run: |
           cd simulator
           python3 ../scripts/update_readme.py --results-dir ../results --readme ../README.md
 
-      - name: Upload experiment results
+      - name: Upload experiment logs and results
         uses: actions/upload-artifact@v4
         with:
           name: experiment-results
@@ -118,8 +127,9 @@ jobs:
             results/
             simulator/experiments/*/analysis_*.csv
             simulator/experiments/*/log-*.log
+            simulator/experiments/*/terminal.out
 
-      - name: Commit and push results
+      - name: Commit results back to repository
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
