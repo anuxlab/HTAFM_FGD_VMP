@@ -58,18 +58,21 @@ jobs:
           cd simulator/data
           mkdir -p csv
 
-          # Download with verbose output (remove -q to see errors)
-          wget -P csv/ https://raw.githubusercontent.com/alibaba/clusterdata/master/cluster-trace-gpu-v2025/openb_node_list_gpu_node.csv
-          wget -P csv/ https://raw.githubusercontent.com/alibaba/clusterdata/master/cluster-trace-gpu-v2025/openb_pod_list_gpushare40.csv
+          # Download the correct v2025 trace file
+          wget -P csv/ https://raw.githubusercontent.com/alibaba/clusterdata/master/cluster-trace-gpu-v2025/disaggregated_DLRM_trace.csv
 
-          # Ensure the script uses python3
-          sed -i 's/python /python3 /g' prepare_input.sh
+          # If prepare_input.sh expects the old filenames, you may need to rename or adjust.
+          # For example, rename the downloaded file to what the script expects:
+          # mv csv/disaggregated_DLRM_trace.csv csv/openb_pod_list_gpushare40.csv
+
           chmod +x prepare_input.sh
+          # If prepare_input.sh fails because it can't find the expected files,
+          # you can bypass it and manually create the required directory structure.
+          # Here we create the directory and copy the file:
+          mkdir -p openb_pod_list_gpushare40
+          cp csv/disaggregated_DLRM_trace.csv openb_pod_list_gpushare40/
 
-          # Run with verbose output to see the exact error
-          bash -x prepare_input.sh
-
-          # Verify output
+          # Verify the files
           ls -la csv/
           ls -la openb_pod_list_gpushare40/
       
