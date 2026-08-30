@@ -156,7 +156,6 @@ jobs:
           cp -r custom-scheduler/htafm simulator/pkg/scheduler/
           cd simulator
           sed -i '/^import (/a \ \ _ "github.com/hkust-adsl/kubernetes-scheduler-simulator/pkg/scheduler/htafm"' pkg/scheduler/register.go
-          go mod vendor
           make
           chmod +x bin/simon
       - name: Install simulator Python deps
