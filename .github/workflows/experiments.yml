@@ -44,9 +44,9 @@ jobs:
           git clone https://github.com/hkust-adsl/kubernetes-scheduler-simulator.git simulator
           cp -r custom-scheduler/htafm simulator/pkg/scheduler/
           cd simulator
-          # Add blank import to trigger the plugin's init() (register.go in the package)
+          # Add blank import to trigger the plugin's init()
           sed -i '/^import (/a \ \ _ "github.com/hkust-adsl/kubernetes-scheduler-simulator/pkg/scheduler/htafm"' pkg/scheduler/register.go
-          go mod vendor
+          # Build without vendoring (make uses go build, not go mod vendor)
           make
           chmod +x bin/simon
       - name: Install simulator Python deps
