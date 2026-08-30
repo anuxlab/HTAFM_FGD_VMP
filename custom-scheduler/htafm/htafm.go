@@ -8,9 +8,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 )
 
-const (
-	Name = "HTAFMScore"
-)
+const Name = "HTAFMScore"
 
 type HTAFM struct {
 	handle  framework.Handle
@@ -20,11 +18,26 @@ type HTAFM struct {
 
 var _ framework.ScorePlugin = &HTAFM{}
 
-// New initializes the plugin.
-func New(obj runtime.Object, h framework.Handle, variant string) (framework.Plugin, error) {
+// Args defines the plugin configuration.
+type Args struct {
+	Variant string `json:"variant"`
+}
+
+// New initializes the plugin with the provided arguments.
+func New(obj runtime.Object, h framework.Handle) (framework.Plugin, error) {
+	args := &Args{}
+	if obj != nil {
+		if err := runtime.DecodeInto(/* codec */, obj, args); err != nil {
+			return nil, err
+		}
+	}
+	// Default to "cut" if not specified
+	if args.Variant == "" {
+		args.Variant = "cut"
+	}
 	return &HTAFM{
 		handle:  h,
-		variant: variant,
+		variant: args.Variant,
 	}, nil
 }
 
@@ -32,20 +45,16 @@ func (pl *HTAFM) Name() string {
 	return Name
 }
 
-// Score calculates the fragmentation score for a node.
-// Lower score is better.
+// Score computes the fragmentation score for a node.
 func (pl *HTAFM) Score(ctx context.Context, state *framework.CycleState, pod *v1.Pod, nodeName string) (int64, *framework.Status) {
-	// Get the node object
+	// Get node info
 	nodeInfo, err := pl.handle.SnapshotSharedLister().NodeInfos().Get(nodeName)
 	if err != nil {
 		return 0, framework.NewStatus(framework.Error, "failed to get node info")
 	}
 	node := nodeInfo.Node()
 
-	// Build hypergraph if not already built.
-	// In production, we would build it once and update it as cluster changes.
-	// For simplicity, we rebuild on each score (inefficient but works for PoC).
-	// To optimize, we can cache the hypergraph and update on node changes.
+	// Build hypergraph (in production, you'd maintain a global one)
 	allNodes, _ := pl.handle.SnapshotSharedLister().NodeInfos().List()
 	nodes := make([]*v1.Node, 0, len(allNodes))
 	for _, ni := range allNodes {
@@ -53,21 +62,20 @@ func (pl *HTAFM) Score(ctx context.Context, state *framework.CycleState, pod *v1
 	}
 	pl.hg = NewHypergraph(nodes)
 
-	// Compute TAFI for the whole cluster if we were to place on this node (simulate)
-	// But we need to consider the current placement; we can compute TAFI after hypothetical placement.
-	// For simplicity, we compute the current TAFI and use it as a score.
-	// A more precise approach would calculate the delta.
-	// We'll treat the current fragmentation as the score.
+	// Compute current TAFI (as a proxy)
 	tafi := ComputeTAFI(pl.hg, nodes, pl.variant)
 
-	// Scale to int64 (0-100)
-	score := int64(tafi * 100)
+	// Score = 100 - tafi (lower fragmentation = higher score)
+	score := int64(100 - tafi*100)
+	if score < 0 {
+		score = 0
+	}
 	if score > 100 {
 		score = 100
 	}
-	return 100 - score, framework.NewStatus(framework.Success, "") // invert so lower fragmentation = higher score
+	return score, framework.NewStatus(framework.Success, "")
 }
 
 func (pl *HTAFM) ScoreExtensions() framework.ScoreExtensions {
-	return nil // we don't need NormalizeScore
+	return nil
 }
