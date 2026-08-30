@@ -123,7 +123,7 @@ jobs:
   # ============================================================
   run-htafm:
     runs-on: ubuntu-latest
-    # if: github.event.inputs.run_htafm == 'true'
+    if: github.event.inputs.run_htafm == 'true'
     strategy:
       matrix:
         variant: [cut, entropy, hier]
