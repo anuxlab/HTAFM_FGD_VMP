@@ -45,10 +45,13 @@ jobs:
       - name: Prepare trace data
         run: |
           cd simulator/data
-          wget -q https://raw.githubusercontent.com/alibaba/clusterdata/master/cluster-trace-gpu-v2025/openb_node_list_gpu_node.csv
-          wget -q https://raw.githubusercontent.com/alibaba/clusterdata/master/cluster-trace-gpu-v2025/openb_pod_list_gpushare40.csv
+          mkdir -p csv
+          wget -q -P csv/ https://raw.githubusercontent.com/alibaba/clusterdata/master/cluster-trace-gpu-v2025/openb_node_list_gpu_node.csv
+          wget -q -P csv/ https://raw.githubusercontent.com/alibaba/clusterdata/master/cluster-trace-gpu-v2025/openb_pod_list_gpushare40.csv
+          chmod +x prepare_input.sh
           ./prepare_input.sh
-          ls -la
+          ls -la csv/
+          ls -la openb_pod_list_gpushare40/
 
       - name: Install Python dependencies
         run: |
