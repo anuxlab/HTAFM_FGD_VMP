@@ -1,26 +1,40 @@
+### 🚀 Parallelized Workflow with Robust Artifact Saving
 name: VM Placement Experiments (Bin Packing)
 
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
     inputs:
       run_htafm:
-        description: 'Run H‑TAFM experiments (in addition to baselines)'
+        description: 'Run H‑TAFM experiments (Cut, Entropy, Hierarchical)'
         type: boolean
-        default: false
+        default: true
 
 jobs:
-  run-experiments:
-    name: Run VM Placement Experiments
+  run-experiment:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        policy:
+          - FGD
+          - BestFit
+          - Random
+        # Add H‑TAFM variants conditionally via include
+        include:
+          - policy: HTAFM-Cut
+            enabled: ${{ github.event.inputs.run_htafm == 'true' || false }}
+          - policy: HTAFM-Entropy
+            enabled: ${{ github.event.inputs.run_htafm == 'true' || false }}
+          - policy: HTAFM-Hier
+            enabled: ${{ github.event.inputs.run_htafm == 'true' || false }}
+      fail-fast: false
+
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Go
@@ -33,12 +47,27 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y make wget
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('simulator/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
-      - name: Clone Kubernetes Scheduler Simulator
+      - name: Cache simulator binary
+        id: cache-sim
+        uses: actions/cache@v4
+        with:
+          path: simulator/bin
+          key: ${{ runner.os }}-simulator-${{ hashFiles('simulator/**/*.go') }}
+          restore-keys: |
+            ${{ runner.os }}-simulator-
+
+      - name: Clone and build simulator (if cache miss)
+        if: steps.cache-sim.outputs.cache-hit != 'true'
         run: |
           git clone https://github.com/hkust-adsl/kubernetes-scheduler-simulator.git simulator
           cd simulator
@@ -46,88 +75,139 @@ jobs:
           make
           chmod +x bin/simon
 
+      - name: Use existing simulator (cache hit)
+        if: steps.cache-sim.outputs.cache-hit == 'true'
+        run: |
+          if [ ! -d simulator ]; then
+            git clone https://github.com/hkust-adsl/kubernetes-scheduler-simulator.git simulator
+          fi
+
       - name: Install Python dependencies (simulator)
         run: |
           cd simulator
           pip install -r requirements.txt
 
-      - name: Prepare trace data
+      - name: Prepare trace data (CSV to YAML)
         run: |
           cd simulator/data
-          # Ensure the conversion script uses python3
-          sed -i 's/python /python3 /g' prepare_input.sh
+          # CSV files are committed to repo under csv/
+          if [ ! -f csv/openb_pod_list_gpushare40.csv ]; then
+            echo "CSV files missing, downloading..."
+            mkdir -p csv
+            wget -P csv/ https://raw.githubusercontent.com/alibaba/clusterdata/master/cluster-trace-gpu-v2025/openb_node_list_gpu_node.csv
+            wget -P csv/ https://raw.githubusercontent.com/alibaba/clusterdata/master/cluster-trace-gpu-v2025/openb_pod_list_gpushare40.csv
+          fi
           chmod +x prepare_input.sh
-          # Convert all CSVs to YAML
+          sed -i 's/python /python3 /g' prepare_input.sh
           ./prepare_input.sh
-          # Verify the required YAML directory exists
-          ls -la openb_pod_list_gpushare40/
 
-      - name: Install additional Python packages for parsing
+      - name: Cache YAML trace data
+        uses: actions/cache@v4
+        with:
+          path: simulator/data/openb_pod_list_gpushare40
+          key: ${{ runner.os }}-trace-yaml-${{ hashFiles('simulator/data/csv/openb_pod_list_gpushare40.csv') }}
+          restore-keys: |
+            ${{ runner.os }}-trace-yaml-
+
+      - name: Install additional packages
         run: pip install pandas matplotlib numpy
 
-      - name: Run baseline experiments (FGD, BestFit, Random)
-        id: baselines
+      - name: Run ${{ matrix.policy }} experiment
+        id: exp
         run: |
           cd simulator
-          mkdir -p experiments
+          mkdir -p experiments/test_$(echo "${{ matrix.policy }}" | tr '[:upper:]' '[:lower:]')
 
-          echo "=== Running FGD ==="
-          time python3 scripts/generate_config_and_run.py \
-            -d experiments/test_fgd -e -b \
-            -f data/openb_pod_list_gpushare40 \
-            -FGD 1000 -gpusel FGD -dimext share -norm max \
-            -tune 1.3 -tuneseed 50 --shuffle-pod=true \
-            -z experiments/test_fgd/snapshot/ds01
+          case "${{ matrix.policy }}" in
+            FGD)
+              python3 scripts/generate_config_and_run.py \
+                -d experiments/test_fgd -e -b \
+                -f data/openb_pod_list_gpushare40 \
+                -FGD 1000 -gpusel FGD -dimext share -norm max \
+                -tune 1.3 -tuneseed 50 --shuffle-pod=true \
+                -z experiments/test_fgd/snapshot/ds01
+              ;;
+            BestFit)
+              python3 scripts/generate_config_and_run.py \
+                -d experiments/test_bestfit -e -b \
+                -f data/openb_pod_list_gpushare40 \
+                -BestFit 1000 \
+                -tune 1.3 -tuneseed 50 --shuffle-pod=true \
+                -z experiments/test_bestfit/snapshot/ds01
+              ;;
+            Random)
+              python3 scripts/generate_config_and_run.py \
+                -d experiments/test_random -e -b \
+                -f data/openb_pod_list_gpushare40 \
+                -Random 1000 -gpusel random \
+                -tune 1.3 -tuneseed 50 --shuffle-pod=true \
+                -z experiments/test_random/snapshot/ds01
+              ;;
+            HTAFM-Cut)
+              echo "=== Running H‑TAFM (Cut) ==="
+              # Replace with your actual H‑TAFM command
+              # python3 scripts/generate_config_and_run.py -d experiments/test_htafm_cut -e -b -f data/openb_pod_list_gpushare40 -HTAFM 1000 -variant cut ...
+              ;;
+            HTAFM-Entropy)
+              echo "=== Running H‑TAFM (Entropy) ==="
+              # python3 scripts/generate_config_and_run.py -d experiments/test_htafm_entropy -e -b -f data/openb_pod_list_gpushare40 -HTAFM 1000 -variant entropy ...
+              ;;
+            HTAFM-Hier)
+              echo "=== Running H‑TAFM (Hierarchical) ==="
+              # python3 scripts/generate_config_and_run.py -d experiments/test_htafm_hier -e -b -f data/openb_pod_list_gpushare40 -HTAFM 1000 -variant hier ...
+              ;;
+          esac
 
-          echo "=== Running BestFit ==="
-          time python3 scripts/generate_config_and_run.py \
-            -d experiments/test_bestfit -e -b \
-            -f data/openb_pod_list_gpushare40 \
-            -BestFit 1000 \
-            -tune 1.3 -tuneseed 50 --shuffle-pod=true \
-            -z experiments/test_bestfit/snapshot/ds01
+      - name: Upload logs for ${{ matrix.policy }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.policy }}
+          path: simulator/experiments/test_*/log-*.log
+          if-no-files-found: ignore
 
-          echo "=== Running Random ==="
-          time python3 scripts/generate_config_and_run.py \
-            -d experiments/test_random -e -b \
-            -f data/openb_pod_list_gpushare40 \
-            -Random 1000 -gpusel random \
-            -tune 1.3 -tuneseed 50 --shuffle-pod=true \
-            -z experiments/test_random/snapshot/ds01
+  aggregate-results:
+    needs: run-experiment
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Run H‑TAFM experiments (if enabled)
-        if: github.event.inputs.run_htafm == 'true'
+      - name: Download all logs
+        uses: actions/download-artifact@v4
+        with:
+          path: all-logs
+
+      - name: Organize logs for parsing
         run: |
-          cd simulator
-          echo "=== Running H‑TAFM (Cut) ==="
-          # Placeholder – add your actual H‑TAFM command here
-          # python3 scripts/generate_config_and_run.py -d experiments/test_htafm -e -b -f data/openb_pod_list_gpushare40 -HTAFM 1000 ...
-          echo "H‑TAFM experiments not yet implemented"
+          mkdir -p simulator/experiments
+          # Copy each policy's log to the expected directory
+          for policy_dir in all-logs/*; do
+            if [ -d "$policy_dir" ]; then
+              cp -r "$policy_dir"/* simulator/experiments/ 2>/dev/null || true
+            fi
+          done
 
       - name: Parse results
         run: |
           cd simulator
           python3 ../scripts/parse_results.py --input-dir experiments --output-dir ../results
 
-      - name: Update README with summary
+      - name: Generate README (complete overwrite)
         run: |
           cd simulator
           python3 ../scripts/update_readme.py --results-dir ../results --readme ../README.md
 
-      - name: Upload experiment logs and results
+      - name: Upload aggregated results
         uses: actions/upload-artifact@v4
         with:
-          name: experiment-results
-          path: |
-            results/
-            simulator/experiments/*/analysis_*.csv
-            simulator/experiments/*/log-*.log
-            simulator/experiments/*/terminal.out
+          name: aggregated-results
+          path: results/
 
-      - name: Commit results back to repository
+      - name: Commit updated README and results
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add results/ README.md
+          git add README.md results/
           git diff --staged --quiet || git commit -m "Auto-update experiment results [skip ci]"
           git push || echo "No changes to push"

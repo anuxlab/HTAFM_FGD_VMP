@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Updates README.md with experiment results.
+Generates a complete README.md from experiment results.
 """
 import json
 import argparse
 from datetime import datetime
 
-def generate_markdown_table(results):
+def generate_table(results):
     """Generate markdown table from results."""
-    table = "| Policy | GPU Utilization | Fragmentation | Unscheduled Pods | Duration |\n"
-    table += "|--------|----------------|---------------|------------------|----------|\n"
+    table = "| Policy | GPU Utilization | Fragmentation | Unscheduled Pods | Duration (s) |\n"
+    table += "|--------|----------------|---------------|------------------|--------------|\n"
     
     for r in results:
         util = r.get('final_allocation', {}).get('gpu_utilization', 'N/A')
@@ -21,8 +21,9 @@ def generate_markdown_table(results):
             frag = f"{frag:.1f}%"
         
         unsched = r.get('unscheduled_pods', 'N/A')
+        dur = r.get('duration', 'N/A')
         
-        table += f"| {r['policy']} | {util} | {frag} | {unsched} | {r.get('duration', 'N/A')}s |\n"
+        table += f"| {r['policy']} | {util} | {frag} | {unsched} | {dur} |\n"
     
     return table
 
@@ -37,33 +38,37 @@ def main():
         with open(f"{args.results_dir}/results.json", 'r') as f:
             results = json.load(f)
     except FileNotFoundError:
-        print("No results found. Skipping README update.")
-        return
+        print("⚠️ No results found. Generating README with placeholder.")
+        results = []
 
-    # Read existing README
-    try:
-        with open(args.readme, 'r') as f:
-            readme_content = f.read()
-    except FileNotFoundError:
-        readme_content = ""
-
-    # Generate new content
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
-    table = generate_markdown_table(results)
+    table = generate_table(results)
 
-    new_section = f"""
-## 📊 Latest Experiment Results
+    # Build complete README content (no partial updates)
+    readme_content = f"""# VM Placement Experiments (Bin Packing)
 
-*Last updated: {timestamp}*
+    Automated benchmark for GPU VM placement policies using the Alibaba GPU trace.
 
-### Summary Table
+    ## 📊 Latest Experiment Results
 
-{table}
+    *Last updated: {timestamp}*
 
-### How to Reproduce
+    ### Summary Table
 
-1. Clone the repository
-2. Run experiments:
-```bash
-cd simulator
-python3 scripts/generate_config_and_run.py -d experiments/test_fgd -e -b -f data/openb_pod_list_gpushare40 -FGD 1000 -gpusel FGD -dimext share -norm max -tune 1.3 -tuneseed 50 --shuffle-pod=true -z experiments/test_fgd/snapshot/ds01
+    {table}
+
+    ### How to Reproduce
+
+    Clone the repository and run the experiments:
+
+    ```bash
+    cd simulator
+    # FGD
+    python3 scripts/generate_config_and_run.py -d experiments/test_fgd -e -b -f data/openb_pod_list_gpushare40 -FGD 1000 -gpusel FGD -dimext share -norm max -tune 1.3 -tuneseed 50 --shuffle-pod=true -z experiments/test_fgd/snapshot/ds01
+
+    # BestFit
+    python3 scripts/generate_config_and_run.py -d experiments/test_bestfit -e -b -f data/openb_pod_list_gpushare40 -BestFit 1000 -tune 1.3 -tuneseed 50 --shuffle-pod=true -z experiments/test_bestfit/snapshot/ds01
+
+    # Random
+    python3 scripts/generate_config_and_run.py -d experiments/test_random -e -b -f data/openb_pod_list_gpushare40 -Random 1000 -gpusel random -tune 1.3 -tuneseed 50 --shuffle-pod=true -z experiments/test_random/snapshot/ds01
+    """
