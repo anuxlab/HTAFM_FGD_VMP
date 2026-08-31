@@ -4,12 +4,12 @@
     "final_allocation": {
       "used_nodes": 1213,
       "used_gpus": 6212,
-      "used_gpu_milli": 5354150,
+      "used_gpu_milli": 5353130,
       "total_gpus": 6212,
-      "gpu_utilization": 0.8619043786220218
+      "gpu_utilization": 0.8617401802962009
     },
-    "fragmentation": 98.99,
-    "unscheduled_pods": 2872
+    "fragmentation": 98.96,
+    "unscheduled_pods": 2863
   },
   {
     "policy": "test_gpuclustering",

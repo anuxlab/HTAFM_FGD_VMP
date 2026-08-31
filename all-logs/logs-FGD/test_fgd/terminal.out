@@ -1,0 +1,6 @@
+ExpDir: experiments/test_fgd
+    cc: experiments/test_fgd/cc_owgpushare40_dr0.0_tn1.3_ts50_if1.0_mdf558.yaml
+    sc: experiments/test_fgd/sc_FGD1000_deshare_gsFGDScore_mdaf9c.yaml
+    Ex: ./bin/simon apply --extended-resources "gpu" -f experiments/test_fgd/cc_owgpushare40_dr0.0_tn1.3_ts50_if1.0_mdf558.yaml --default-scheduler-config experiments/test_fgd/sc_FGD1000_deshare_gsFGDScore_mdaf9c.yaml
+    >>: experiments/test_fgd/log-cc_owgpushare40_dr0.0_tn1.3_ts50_if1.0_mdf558.yaml-sc_FGD1000_deshare_gsFGDScore_mdaf9c.yaml.log 
+

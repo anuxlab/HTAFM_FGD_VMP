@@ -1,5 +1,5 @@
 policy,final_allocation,fragmentation,unscheduled_pods
-Random,"{'used_nodes': 1213, 'used_gpus': 6212, 'used_gpu_milli': 5354150, 'total_gpus': 6212, 'gpu_utilization': 0.8619043786220218}",98.99,2872
+Random,"{'used_nodes': 1213, 'used_gpus': 6212, 'used_gpu_milli': 5353130, 'total_gpus': 6212, 'gpu_utilization': 0.8617401802962009}",98.96,2863
 test_gpuclustering,"{'used_nodes': 1213, 'used_gpus': 6212, 'used_gpu_milli': 5599640, 'total_gpus': 6212, 'gpu_utilization': 0.9014230521571153}",98.49,3004
 FGD,"{'used_nodes': 1213, 'used_gpus': 6212, 'used_gpu_milli': 5848010, 'total_gpus': 6212, 'gpu_utilization': 0.9414053444945267}",98.05,2697
 test_dotproduct,"{'used_nodes': 1213, 'used_gpus': 6212, 'used_gpu_milli': 5564370, 'total_gpus': 6212, 'gpu_utilization': 0.8957453316162266}",99.09,3058

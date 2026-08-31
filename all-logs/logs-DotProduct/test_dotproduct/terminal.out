@@ -1,0 +1,6 @@
+ExpDir: experiments/test_dotproduct
+    cc: experiments/test_dotproduct/cc_owgpushare40_dr0.0_tn1.3_ts50_if1.0_mded88.yaml
+    sc: experiments/test_dotproduct/sc_DotProd1000_demerge_gsbest_mdbaad.yaml
+    Ex: ./bin/simon apply --extended-resources "gpu" -f experiments/test_dotproduct/cc_owgpushare40_dr0.0_tn1.3_ts50_if1.0_mded88.yaml --default-scheduler-config experiments/test_dotproduct/sc_DotProd1000_demerge_gsbest_mdbaad.yaml
+    >>: experiments/test_dotproduct/log-cc_owgpushare40_dr0.0_tn1.3_ts50_if1.0_mded88.yaml-sc_DotProd1000_demerge_gsbest_mdbaad.yaml.log 
+
