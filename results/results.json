@@ -1,1 +1,74 @@
-[]
+[
+  {
+    "policy": "Random",
+    "final_allocation": {
+      "used_nodes": 1213,
+      "used_gpus": 6212,
+      "used_gpu_milli": 5354150,
+      "total_gpus": 6212,
+      "gpu_utilization": 0.8619043786220218
+    },
+    "fragmentation": 98.99,
+    "unscheduled_pods": 2872
+  },
+  {
+    "policy": "test_gpuclustering",
+    "final_allocation": {
+      "used_nodes": 1213,
+      "used_gpus": 6212,
+      "used_gpu_milli": 5599640,
+      "total_gpus": 6212,
+      "gpu_utilization": 0.9014230521571153
+    },
+    "fragmentation": 98.49,
+    "unscheduled_pods": 3004
+  },
+  {
+    "policy": "FGD",
+    "final_allocation": {
+      "used_nodes": 1213,
+      "used_gpus": 6212,
+      "used_gpu_milli": 5848010,
+      "total_gpus": 6212,
+      "gpu_utilization": 0.9414053444945267
+    },
+    "fragmentation": 98.05,
+    "unscheduled_pods": 2697
+  },
+  {
+    "policy": "test_dotproduct",
+    "final_allocation": {
+      "used_nodes": 1213,
+      "used_gpus": 6212,
+      "used_gpu_milli": 5564370,
+      "total_gpus": 6212,
+      "gpu_utilization": 0.8957453316162266
+    },
+    "fragmentation": 99.09,
+    "unscheduled_pods": 3058
+  },
+  {
+    "policy": "BestFit",
+    "final_allocation": {
+      "used_nodes": 1213,
+      "used_gpus": 6212,
+      "used_gpu_milli": 5712680,
+      "total_gpus": 6212,
+      "gpu_utilization": 0.9196200901481004
+    },
+    "fragmentation": 99.17,
+    "unscheduled_pods": 2867
+  },
+  {
+    "policy": "test_gpupacking",
+    "final_allocation": {
+      "used_nodes": 1213,
+      "used_gpus": 6212,
+      "used_gpu_milli": 5605940,
+      "total_gpus": 6212,
+      "gpu_utilization": 0.902437218287186
+    },
+    "fragmentation": 98.92,
+    "unscheduled_pods": 3003
+  }
+]
