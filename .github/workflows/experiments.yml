@@ -197,8 +197,8 @@ jobs:
             exit 1
           fi
 
-          # Set the absolute path for later use
-          echo "CLUSTER_CONFIG=simulator/cluster-config/cluster-config.yaml" >> $GITHUB_ENV
+          # ✅ Set relative path (will be used after `cd simulator`)
+          echo "CLUSTER_CONFIG=cluster-config/cluster-config.yaml" >> $GITHUB_ENV
           echo "✅ Cluster config ready at $CLUSTER_CONFIG"
 
       - name: Run HTAFM-${{ matrix.variant }}
@@ -232,7 +232,7 @@ jobs:
             schedulerName: simon-scheduler
           EOF
 
-          # Run the simulation using the prepared cluster config
+          # ✅ Use the relative path set in the environment variable
           ./bin/simon apply --extended-resources "gpu" \
             -f ${{ env.CLUSTER_CONFIG }} \
             --default-scheduler-config ${EXP_DIR}/scheduler-config.yaml \
