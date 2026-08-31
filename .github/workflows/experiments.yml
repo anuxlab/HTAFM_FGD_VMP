@@ -119,11 +119,11 @@ jobs:
           path: simulator/experiments/test_random/cc_*.yaml
 
   # ============================================================
-  # H‑TAFM EXPERIMENTS (3 variants)
+  # H‑TAFM EXPERIMENTS (3 variants with fallback)
   # ============================================================
   run-htafm:
     runs-on: ubuntu-latest
-    if: github.event.inputs.run_htafm == 'true'
+    # if: github.event.inputs.run_htafm == 'true'
     strategy:
       matrix:
         variant: [cut, entropy, hier]
@@ -167,16 +167,39 @@ jobs:
       - name: Install additional Python packages
         run: pip install pandas matplotlib numpy
 
-      - name: Download cluster config from baseline Random
+      # ------------------------------------------------------------------
+      # Download cluster config from artifact (if available) OR use fallback
+      # ------------------------------------------------------------------
+      - name: Download cluster config from baseline Random (attempt)
         uses: actions/download-artifact@v4
         with:
           name: cluster-config
           path: cluster-config
+        continue-on-error: true
 
-      - name: Set cluster config path
-        id: set-config
+      - name: Prepare final cluster config (artifact or fallback)
+        id: prep-config
         run: |
-          echo "CLUSTER_CONFIG=$(ls cluster-config/cc_*.yaml | head -1)" >> $GITHUB_ENV
+          mkdir -p simulator/cluster-config
+
+          # 1. If artifact was downloaded and contains a YAML file, use it
+          if [ -d cluster-config ] && [ -f cluster-config/cc_*.yaml ]; then
+            echo "✅ Using cluster config from artifact."
+            cp cluster-config/cc_*.yaml simulator/cluster-config/cluster-config.yaml
+          # 2. Else, use the fallback file from the experiments repo (data/cluster_configs/)
+          elif [ -f data/cluster_configs/cc_*.yaml ]; then
+            echo "ℹ️ Artifact not found. Using fallback from data/cluster_configs/"
+            cp data/cluster_configs/cc_*.yaml simulator/cluster-config/cluster-config.yaml
+          else
+            echo "❌ No cluster config found! Please either:"
+            echo "   - Run the baseline Random experiment to generate the artifact, or"
+            echo "   - Place a fallback file at data/cluster_configs/cc_*.yaml"
+            exit 1
+          fi
+
+          # Set the absolute path for later use
+          echo "CLUSTER_CONFIG=simulator/cluster-config/cluster-config.yaml" >> $GITHUB_ENV
+          echo "✅ Cluster config ready at $CLUSTER_CONFIG"
 
       - name: Run HTAFM-${{ matrix.variant }}
         run: |
@@ -209,11 +232,18 @@ jobs:
             schedulerName: simon-scheduler
           EOF
 
-          # Run the simulation using the pre‑generated cluster config
+          # Run the simulation using the prepared cluster config
           ./bin/simon apply --extended-resources "gpu" \
             -f ${{ env.CLUSTER_CONFIG }} \
             --default-scheduler-config ${EXP_DIR}/scheduler-config.yaml \
             > ${EXP_DIR}/log-htafm-${{ matrix.variant }}.log 2>&1
+
+          # Verify the log file exists and is non-empty
+          if [ ! -s ${EXP_DIR}/log-htafm-${{ matrix.variant }}.log ]; then
+            echo "⚠️ Warning: Log file is empty. Simulation may have failed."
+          else
+            echo "✅ Log file created: ${EXP_DIR}/log-htafm-${{ matrix.variant }}.log"
+          fi
 
       - name: Upload logs for HTAFM-${{ matrix.variant }}
         uses: actions/upload-artifact@v4
