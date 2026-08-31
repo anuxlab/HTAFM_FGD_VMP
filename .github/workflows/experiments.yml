@@ -44,19 +44,18 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('simulator/go.sum') }}
           restore-keys: ${{ runner.os }}-go-
 
-      - name: Clone and build simulator (from fork) with verbose logs
+      - name: Clone and build simulator (from fork)
         id: build
         run: |
           set -x
           git clone https://github.com/anuxlab/anu_kubernetes-scheduler-simulator.git simulator
           cd simulator
-          make -v 2>&1 | tee build.log
+          make 2>&1 | tee build.log
           chmod +x bin/simon
           # Verify binary exists
           ls -la bin/
           # Check if HTAFM plugin is compiled (look for symbol in binary)
           go version -m bin/simon | grep -i htafm || echo "HTAFM plugin not found in binary"
-        continue-on-error: false
 
       - name: Upload build log (baseline)
         uses: actions/upload-artifact@v4
@@ -73,7 +72,7 @@ jobs:
       - name: Install additional Python packages (for parsing)
         run: pip install pandas matplotlib numpy
 
-      - name: Run ${{ matrix.policy }} experiment with verbose output
+      - name: Run ${{ matrix.policy }} experiment
         id: exp
         run: |
           set -x
@@ -174,17 +173,16 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('simulator/go.sum') }}
           restore-keys: ${{ runner.os }}-go-
 
-      - name: Clone and build simulator with verbose logging
+      - name: Clone and build simulator (from fork)
         id: build_htafm
         run: |
           set -x
           git clone https://github.com/anuxlab/anu_kubernetes-scheduler-simulator.git simulator
           cd simulator
-          make -v 2>&1 | tee build.log
+          make 2>&1 | tee build.log
           chmod +x bin/simon
           ls -la bin/
           go version -m bin/simon | grep -i htafm || echo "HTAFM plugin not found in binary"
-        continue-on-error: false
 
       - name: Upload build log (htafm)
         uses: actions/upload-artifact@v4
@@ -209,33 +207,29 @@ jobs:
           path: cluster-config
         continue-on-error: true
 
-      - name: Prepare final cluster config (artifact or fallback) with debug
+      - name: Prepare final cluster config (artifact or fallback)
         id: prep-config
         run: |
           set -x
           mkdir -p simulator/cluster-config
-          echo "Checking for artifact..."
           if [ -d cluster-config ] && [ -f cluster-config/cc_*.yaml ]; then
             echo "✅ Using cluster config from artifact."
             cp cluster-config/cc_*.yaml simulator/cluster-config/cluster-config.yaml
-            ls -la simulator/cluster-config/
           elif [ -f data/cluster_configs/cc_*.yaml ]; then
             echo "ℹ️ Artifact not found. Using fallback from data/cluster_configs/"
             cp data/cluster_configs/cc_*.yaml simulator/cluster-config/cluster-config.yaml
-            ls -la simulator/cluster-config/
           else
             echo "❌ No cluster config found! Please either:"
             echo "   - Run the baseline Random experiment to generate the artifact, or"
             echo "   - Place a fallback file at data/cluster_configs/cc_*.yaml"
             exit 1
           fi
-
           echo "CLUSTER_CONFIG=cluster-config/cluster-config.yaml" >> $GITHUB_ENV
           echo "✅ Cluster config ready"
-          # Print content of cluster config for debugging
+          # Print cluster config content for debugging
           cat simulator/cluster-config/cluster-config.yaml
 
-      - name: Run HTAFM-${{ matrix.variant }} with full debug output
+      - name: Run HTAFM-${{ matrix.variant }}
         id: run_htafm
         run: |
           set -x
@@ -267,34 +261,26 @@ jobs:
             schedulerName: simon-scheduler
           EOF
 
-          # Print scheduler config for debugging
           echo "--- Scheduler config ---"
           cat ${EXP_DIR}/scheduler-config.yaml
           echo "--- End scheduler config ---"
 
           LOG_FILE="${EXP_DIR}/log-htafm-${{ matrix.variant }}.log"
-          # Run with verbose and capture both stdout and stderr
           ./bin/simon apply --extended-resources "gpu" \
             -f ${{ env.CLUSTER_CONFIG }} \
             --default-scheduler-config ${EXP_DIR}/scheduler-config.yaml \
             2>&1 | tee ${LOG_FILE}
 
-          # Also store the exit code
           EXIT_CODE=${PIPESTATUS[0]}
           echo "Exit code: $EXIT_CODE" >> ${LOG_FILE}
 
-          # If log file is empty, print error
           if [ ! -s ${LOG_FILE} ]; then
             echo "⚠️ Warning: Log file is empty. Simulation may have failed."
-            echo "Please check the runner logs for detailed output."
           else
             echo "✅ Log file created: ${LOG_FILE}"
-            # Print last 50 lines for quick check
             echo "--- Last 50 lines of log ---"
             tail -50 ${LOG_FILE}
           fi
-
-          # Exit with the simon exit code
           exit $EXIT_CODE
 
       - name: Upload logs for HTAFM-${{ matrix.variant }}
@@ -307,7 +293,7 @@ jobs:
           if-no-files-found: ignore
 
   # ============================================================
-  # AGGREGATE & COMMIT RESULTS (with all logs)
+  # AGGREGATE & COMMIT RESULTS
   # ============================================================
   aggregate-results:
     needs: [run-baseline, run-htafm]
@@ -333,13 +319,11 @@ jobs:
       - name: Organise logs for parsing and debug
         run: |
           mkdir -p simulator/experiments
-          # Copy all log files to experiments directory
           for policy_dir in all-logs/*; do
             if [ -d "$policy_dir" ]; then
               cp -r "$policy_dir"/* simulator/experiments/ 2>/dev/null || true
             fi
           done
-          # Also copy build logs for debugging
           mkdir -p build-logs
           find all-logs -name "build.log" -exec cp {} build-logs/ \;
 
@@ -370,7 +354,6 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          # Add all new/changed files
           git add README.md results/ build-logs/ all-logs/
           git diff --staged --quiet || git commit -m "Auto-update experiment results and debug logs [skip ci]"
           git push https://x-access-token:${PAT_TOKEN}@github.com/anuxlab/HTAFM_FGD_VMP.git HEAD:main || echo "Push failed; check PAT token permissions."
